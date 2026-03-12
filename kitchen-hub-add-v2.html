@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080808">
+<title>Kitchen Add</title>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#080808;--c1:#111;--c2:#181818;--c3:#222;--c4:#2a2a2a;
+  --sep:rgba(255,255,255,0.07);
+  --t1:#fff;--t2:rgba(255,255,255,.6);--t3:rgba(255,255,255,.28);
+  --gold:#c8a84b;--green:#34c759;--red:#ff453a;--orange:#ff9500;--blue:#4facfe;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--t1);font-family:-apple-system,'SF Pro Text','Outfit',sans-serif;min-height:100dvh;-webkit-font-smoothing:antialiased}
+
+/* ── TOP BAR ── */
+#topbar{
+  position:sticky;top:0;z-index:10;
+  background:rgba(8,8,8,.92);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--sep);
+  padding:env(safe-area-inset-top,16px) 16px 0;
+}
+#topbar-inner{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:14px;
+}
+#app-title{
+  font-family:'Outfit',sans-serif;
+  font-size:20px;font-weight:800;letter-spacing:-.3px;
+}
+#app-title span{color:var(--gold)}
+#sync-dot{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--t3);font-weight:600;
+}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--c4)}
+.sdot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sdot.syn{background:var(--gold);animation:pulse .9s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── TABS ── */
+#tabs{
+  display:flex;gap:4px;padding:0 0 12px;
+}
+.tab{
+  flex:1;padding:10px;border-radius:12px;border:none;
+  font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;
+  background:var(--c2);color:var(--t3);cursor:pointer;
+  transition:all .18s;position:relative;
+}
+.tab.on{background:var(--gold);color:#000}
+.tab-bdg{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.2);border-radius:20px;
+  font-size:11px;font-weight:800;padding:0 6px;height:17px;
+  margin-left:6px;min-width:17px;
+}
+.tab.on .tab-bdg{background:rgba(0,0,0,.25);color:rgba(0,0,0,.7)}
+.tab:not(.on) .tab-bdg{background:var(--c3);color:var(--t3)}
+
+/* ── ADD INPUT ── */
+#add-bar{
+  padding:12px 16px;border-bottom:1px solid var(--sep);
+  display:flex;gap:10px;align-items:center;
+  background:var(--bg);
+  position:sticky;top:calc(env(safe-area-inset-top,16px) + 98px);
+  z-index:9;
+}
+#add-inp{
+  flex:1;background:var(--c2);border:1px solid transparent;border-radius:14px;
+  color:var(--t1);font-family:-apple-system,'SF Pro Text',sans-serif;
+  font-size:16px;padding:12px 15px;outline:none;
+  transition:border-color .15s,background .15s;
+  -webkit-appearance:none;
+}
+#add-inp:focus{border-color:var(--gold);background:var(--c3)}
+#add-inp::placeholder{color:var(--t3)}
+#add-btn{
+  background:var(--gold);border:none;border-radius:14px;color:#000;
+  font-family:'Outfit',sans-serif;font-size:20px;font-weight:800;
+  width:46px;height:46px;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .14s,transform .1s;
+}
+#add-btn:active{opacity:.7;transform:scale(.94)}
+
+/* ── LIST ── */
+#list-wrap{padding:8px 0 calc(env(safe-area-inset-bottom,24px) + 24px)}
+.li{
+  display:flex;align-items:center;gap:14px;
+  padding:13px 18px;border-bottom:1px solid var(--sep);
+  cursor:pointer;user-select:none;transition:background .1s;
+  -webkit-user-select:none;
+}
+.li:active{background:var(--c1)}
+.li.done .litxt{text-decoration:line-through;color:var(--t3)}
+.lick{
+  width:24px;height:24px;border-radius:50%;border:2px solid var(--c4);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:13px;transition:all .18s;
+}
+.li.done .lick{background:var(--green);border-color:var(--green);color:#000}
+.litxt{font-size:16px;flex:1;line-height:1.3}
+.lirm{
+  background:none;border:none;color:var(--t3);
+  font-size:20px;width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border-radius:8px;flex-shrink:0;
+  transition:background .12s,color .12s;
+}
+.lirm:active{background:rgba(255,69,58,.15);color:var(--red)}
+
+/* ── EMPTY STATE ── */
+#empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:60px 24px;
+}
+#empty .ico{font-size:48px;opacity:.15}
+#empty p{font-size:14px;color:var(--t3);text-align:center;line-height:1.7}
+
+/* ── CLEAR DONE ── */
+#clear-done-bar{
+  display:none;
+  padding:8px 18px 4px;
+}
+#clear-done-btn{
+  background:var(--c2);border:none;border-radius:10px;color:var(--t3);
+  font-family:'Outfit',sans-serif;font-size:12px;font-weight:700;
+  padding:7px 14px;cursor:pointer;transition:background .14s;
+}
+#clear-done-btn:active{background:var(--c3)}
+
+/* ── MEAL WEEK ── */
+.meal-day{background:var(--c1);border-radius:16px;margin-bottom:10px;overflow:hidden;border:2px solid transparent;}
+.meal-day.today{border-color:var(--gold);}
+.meal-day-hd{display:flex;align-items:baseline;gap:8px;padding:12px 16px 8px;}
+.meal-day-dow{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);}
+.meal-day-dt{font-size:22px;font-weight:900;color:var(--t1);}
+.meal-day.today .meal-day-dt{color:var(--gold);}
+.meal-day-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:6px;}
+.meal-item{display:flex;align-items:center;gap:10px;background:var(--c2);border-radius:10px;padding:8px 12px;}
+.meal-item-txt{flex:1;font-size:14px;line-height:1.3;}
+.meal-item-rm{background:none;border:none;color:var(--t3);font-size:16px;padding:2px 6px;cursor:pointer;}
+.meal-add-btn{background:none;border:1.5px dashed var(--c4);border-radius:10px;padding:7px 12px;width:100%;color:var(--t3);font-size:13px;cursor:pointer;text-align:left;}
+/* Meal input row */
+#meal-inp-row{display:none;gap:8px;padding:0 12px 10px;}
+#meal-inp-row.show{display:flex;}
+#meal-inp{flex:1;background:var(--c2);border:1.5px solid var(--gold);border-radius:10px;color:var(--t1);font-size:15px;padding:10px 12px;outline:none;}
+
+  font-size:10px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--t3);padding:14px 18px 6px;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="topbar-inner">
+    <div id="app-title">Kitchen <span>Hub</span></div>
+    <div id="sync-dot"><div class="sdot ok" id="sdot"></div><span id="sdot-lbl">Connected</span></div>
+  </div>
+  <div id="tabs">
+    <button class="tab on" id="tab-grocery" onclick="switchTab('grocery')">
+      🛒 Groceries <span class="tab-bdg" id="gbdg">0</span>
+    </button>
+    <button class="tab" id="tab-todo" onclick="switchTab('todo')">
+      ✅ To-Do <span class="tab-bdg" id="tbdg">0</span>
+    </button>
+    <button class="tab" id="tab-meals" onclick="switchTab('meals')">
+      🍽️ Meals
+    </button>
+  </div>
+</div>
+
+<div id="add-bar">
+  <input id="add-inp" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
+    placeholder="Add item…"
+    onfocus="scrollToInput()"
+    onkeydown="if(event.key==='Enter')addItem()">
+  <button id="add-btn" onclick="addItem()">+</button>
+</div>
+
+<div id="clear-done-bar">
+  <button id="clear-done-btn" onclick="clearDone()">Clear done items</button>
+</div>
+
+<div id="list-wrap">
+  <div id="empty"><div class="ico">📋</div><p>Nothing here yet.<br>Type above to add something.</p></div>
+</div>
+
+<!-- MEALS VIEW -->
+<div id="meals-view" style="display:none;padding:12px 16px calc(env(safe-area-inset-bottom,24px)+24px);">
+  <div id="meals-week"></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  FIREBASE INIT
+// ════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCMCrww2E6M8UYwH4LQKyPnHz7agflmU7M",
+  authDomain: "kitchen-homebase.firebaseapp.com",
+  databaseURL: "https://kitchen-homebase-default-rtdb.firebaseio.com",
+  projectId: "kitchen-homebase",
+  storageBucket: "kitchen-homebase.firebasestorage.app",
+  messagingSenderId: "42483963800",
+  appId: "1:42483963800:web:45503717a66278646d3ded"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════
+let currentTab = 'grocery';
+let groceryItems = [];
+let todoItems = [];
+let mealsData = {}; // {YYYY-MM-DD: ['meal1','meal2']}
+let mealEditDate = null;
+
+// Connection status
+db.ref('.info/connected').on('value', snap => {
+  const connected = snap.val();
+  const dot = document.getElementById('sdot');
+  const lbl = document.getElementById('sdot-lbl');
+  dot.className = connected ? 'sdot ok' : 'sdot';
+  lbl.textContent = connected ? 'Connected' : 'Offline';
+});
+
+// ════════════════════════════════════════════
+//  FIREBASE LISTENERS
+// ════════════════════════════════════════════
+db.ref('grocery').on('value', snap => {
+  const val = snap.val() || {};
+  groceryItems = Object.entries(val).map(([id,v]) => ({id,...v})).sort((a,b)=>a.done-b.done||(a.addedAt-b.addedAt));
+  updateBadges();
+  if(currentTab==='grocery') renderList();
+});
+
+db.ref('todo').on('value', snap => {
+  const val = snap.val() || {};
+  todoItems = Object.entries(val).map(([id,v]) => ({id,...v})).sort((a,b)=>a.done-b.done||(a.addedAt-b.addedAt));
+  updateBadges();
+  if(currentTab==='todo') renderList();
+});
+
+// Listen to next 14 days of meals
+const today = new Date();
+for(let i=0;i<14;i++){
+  const d=new Date(today);d.setDate(today.getDate()+i);
+  const key=fmtDateAdd(d);
+  db.ref('meals/'+key).on('value', snap=>{
+    const val=snap.val();
+    if(val&&val.length) mealsData[key]=val;
+    else delete mealsData[key];
+    if(currentTab==='meals') renderMeals();
+  });
+}
+
+function fmtDateAdd(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDateAdd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+  const val = snap.val() || {};
+  groceryItems = Object.entries(val).map(([id, v]) => ({id, ...v}));
+  if(currentTab === 'grocery') renderList();
+  updateBadges();
+});
+
+db.ref('todo').on('value', snap => {
+  const val = snap.val() || {};
+  todoItems = Object.entries(val).map(([id, v]) => ({id, ...v}));
+  if(currentTab === 'todo') renderList();
+  updateBadges();
+});
+
+// ════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════
+function getItems(){return currentTab === 'grocery' ? groceryItems : todoItems;}
+
+function renderList(){
+  const wrap = document.getElementById('list-wrap');
+  const items = getItems();
+  const clearBar = document.getElementById('clear-done-bar');
+
+  if(!items.length){
+    wrap.innerHTML = `<div id="empty"><div class="ico">${currentTab==='grocery'?'🛒':'✅'}</div><p>Nothing here yet.<br>Type above to add something.</p></div>`;
+    clearBar.style.display = 'none';
+    return;
+  }
+
+  // Sort: undone first, done at bottom
+  const sorted = [...items].sort((a,b) => (!!a.done) - (!!b.done));
+  const hasDone = sorted.some(i => i.done);
+  clearBar.style.display = hasDone ? 'block' : 'none';
+
+  const undone = sorted.filter(i => !i.done);
+  const done = sorted.filter(i => i.done);
+
+  let html = '';
+  if(undone.length){
+    html += `<div class="sec-hd">${undone.length} remaining</div>`;
+    undone.forEach(item => {html += renderItem(item);});
+  }
+  if(done.length){
+    html += `<div class="sec-hd">✓ Done (${done.length})</div>`;
+    done.forEach(item => {html += renderItem(item);});
+  }
+
+  wrap.innerHTML = html;
+
+  // Attach click handlers
+  wrap.querySelectorAll('.li').forEach(el => {
+    const id = el.dataset.id;
+    const isDone = el.classList.contains('done');
+    el.querySelector('.lick').onclick = el.querySelector('.litxt').onclick = () => toggleItem(id, isDone);
+  });
+  wrap.querySelectorAll('.lirm').forEach(el => {
+    el.onclick = (e) => {e.stopPropagation();removeItem(el.dataset.id);};
+  });
+}
+
+function renderItem(item){
+  return `<div class="li${item.done?' done':''}" data-id="${item.id}">
+    <div class="lick">${item.done?'✓':''}</div>
+    <div class="litxt">${escHtml(item.text)}</div>
+    <button class="lirm" data-id="${item.id}">×</button>
+  </div>`;
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function updateBadges(){
+  const gRem = groceryItems.filter(i=>!i.done).length;
+  const tRem = todoItems.filter(i=>!i.done).length;
+  document.getElementById('gbdg').textContent = gRem;
+  document.getElementById('tbdg').textContent = tRem;
+}
+
+// ════════════════════════════════════════════
+//  ACTIONS
+// ════════════════════════════════════════════
+// tab switching handled above
+function renderMeals(){
+  const wrap = document.getElementById('meals-week');
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const todayStr = fmtDateAdd(new Date());
+  wrap.innerHTML = '';
+  for(let i=0;i<7;i++){
+    const d=new Date();d.setDate(d.getDate()+i);
+    const key=fmtDateAdd(d);
+    const isToday=key===todayStr;
+    const meals=mealsData[key]||[];
+    const div=document.createElement('div');
+    div.className='meal-day'+(isToday?' today':'');
+    const mealHTML=meals.map((m,mi)=>`
+      <div class="meal-item">
+        <div class="meal-item-txt">${escHtml(m)}</div>
+        <button class="meal-item-rm" onclick="removeMeal('${key}',${mi})">×</button>
+      </div>`).join('');
+    div.innerHTML=`
+      <div class="meal-day-hd">
+        <div class="meal-day-dow">${DOW[d.getDay()]}</div>
+        <div class="meal-day-dt">${MONTHS[d.getMonth()]} ${d.getDate()}</div>
+      </div>
+      <div class="meal-day-body">
+        ${mealHTML}
+        <button class="meal-add-btn" onclick="startAddMeal('${key}')">+ Add meal</button>
+      </div>
+      <div class="meal-inp-row" id="mir-${key}" style="display:none;gap:8px;padding:0 12px 10px">
+        <input id="mi-${key}" class="meal-inp" style="flex:1;background:var(--c2);border:1.5px solid var(--gold);border-radius:10px;color:var(--t1);font-size:15px;padding:10px 12px;outline:none;" placeholder="e.g. Pasta night 🍝" onkeydown="if(event.key==='Enter')saveMealAdd('${key}');if(event.key==='Escape')cancelMealAdd('${key}')">
+        <button onclick="saveMealAdd('${key}')" style="background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:800;padding:10px 14px;cursor:pointer;">Add</button>
+      </div>`;
+    wrap.appendChild(div);
+  }
+}
+
+function startAddMeal(dateKey){
+  if(mealEditDate) cancelMealAdd(mealEditDate);
+  mealEditDate=dateKey;
+  const row=document.getElementById('mir-'+dateKey);
+  if(row){row.style.display='flex';const inp=document.getElementById('mi-'+dateKey);if(inp){inp.focus();}}
+}
+function cancelMealAdd(dateKey){
+  const row=document.getElementById('mir-'+dateKey);
+  if(row)row.style.display='none';
+  mealEditDate=null;
+}
+function saveMealAdd(dateKey){
+  const inp=document.getElementById('mi-'+dateKey);
+  const text=inp?inp.value.trim():'';
+  if(!text){cancelMealAdd(dateKey);return;}
+  const current=mealsData[dateKey]||[];
+  db.ref('meals/'+dateKey).set([...current,text]);
+  cancelMealAdd(dateKey);
+}
+function removeMeal(dateKey,idx){
+  const current=[...(mealsData[dateKey]||[])];
+  current.splice(idx,1);
+  db.ref('meals/'+dateKey).set(current.length?current:null);
+}
+
+  currentTab = tab;
+  document.getElementById('tab-grocery').classList.toggle('on', tab==='grocery');
+  document.getElementById('tab-todo').classList.toggle('on', tab==='todo');
+  const inp = document.getElementById('add-inp');
+  inp.placeholder = tab === 'grocery' ? 'Add grocery item…' : 'Add task…';
+  renderList();
+  inp.focus();
+}
+
+function addItem(){
+  const inp = document.getElementById('add-inp');
+  const text = inp.value.trim();
+  if(!text) return;
+
+  const items = getItems();
+  const exists = items.some(i => i.text.toLowerCase() === text.toLowerCase());
+  if(!exists){
+    // Show syncing indicator briefly
+    const dot = document.getElementById('sdot');
+    dot.className = 'sdot syn';
+    db.ref(currentTab).push({text, done:false, addedAt: Date.now()})
+      .then(() => {dot.className = 'sdot ok';});
+  }
+
+  inp.value = '';
+  inp.focus();
+}
+
+function toggleItem(id, currentDone){
+  const dot = document.getElementById('sdot');
+  dot.className = 'sdot syn';
+  db.ref(currentTab+'/'+id+'/done').set(!currentDone)
+    .then(() => {dot.className = 'sdot ok';});
+}
+
+function removeItem(id){
+  db.ref(currentTab+'/'+id).remove();
+}
+
+function clearDone(){
+  const items = getItems().filter(i => i.done);
+  const updates = {};
+  items.forEach(i => updates[i.id] = null);
+  if(Object.keys(updates).length) db.ref(currentTab).update(updates);
+}
+
+// ════════════════════════════════════════════
+//  UX HELPERS
+// ════════════════════════════════════════════
+function scrollToInput(){
+  setTimeout(()=>{
+    document.getElementById('add-inp').scrollIntoView({behavior:'smooth',block:'center'});
+  },300);
+}
+
+// Haptic feedback on iOS when available
+function haptic(){
+  if(navigator.vibrate) navigator.vibrate(10);
+}
+</script>
+</body>
+</html>

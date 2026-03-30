@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080808">
+<title>Kitchen Hub</title>
+<link rel="apple-touch-icon" href="icon.jpg">
+<link rel="icon" type="image/jpeg" href="icon.jpg">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#080808;--c1:#111;--c2:#181818;--c3:#222;--c4:#2a2a2a;
+  --sep:rgba(255,255,255,0.07);
+  --t1:#fff;--t2:rgba(255,255,255,.6);--t3:rgba(255,255,255,.28);--t4:rgba(255,255,255,.11);
+  --gold:#c8a84b;--green:#34c759;--red:#ff453a;--orange:#ff9500;--blue:#4facfe;--purple:#bf5af2;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--t1);font-family:-apple-system,"SF Pro Text","Outfit",sans-serif;-webkit-font-smoothing:antialiased;height:100dvh;overflow:hidden;}
+#app{display:flex;flex-direction:column;height:100dvh;}
+
+/* ── TOP BAR ── */
+#topbar{flex-shrink:0;background:rgba(8,8,8,.97);border-bottom:1px solid var(--sep);padding:env(safe-area-inset-top,12px) 14px 0;z-index:100;}
+#topbar-inner{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;}
+#app-title{font-size:19px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:10px;}
+#app-title img{width:28px;height:28px;border-radius:6px;object-fit:cover;}
+#app-title span{color:var(--gold)}
+#sync-dot{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);font-weight:600;}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--c4)}
+.sdot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sdot.syn{background:var(--gold);animation:pulse .9s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── TABS ── */
+#tabs{display:flex;gap:3px;padding-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+#tabs::-webkit-scrollbar{display:none}
+.tab{flex-shrink:0;padding:8px 10px;border-radius:10px;border:none;font-family:inherit;font-size:11px;font-weight:700;background:var(--c2);color:var(--t3);cursor:pointer;transition:all .15s;min-height:40px;line-height:1.25;white-space:nowrap;}
+.tab.on{background:var(--gold);color:#000}
+.tab-bdg{display:inline-flex;align-items:center;justify-content:center;background:rgba(0,0,0,.18);border-radius:20px;font-size:9px;font-weight:800;padding:0 5px;height:15px;margin-left:3px;min-width:15px;}
+.tab:not(.on) .tab-bdg{background:var(--c3);color:var(--t3)}
+
+/* ── CONTENT ── */
+#content{flex:1;min-height:0;position:relative;overflow:hidden;}
+.view{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden;}
+.view.on{display:flex;}
+
+/* ── SHARED INPUTS ── */
+.inp{background:var(--c2);border:1px solid transparent;border-radius:12px;color:var(--t1);font-family:inherit;font-size:16px;padding:10px 13px;outline:none;transition:border-color .15s,background .15s;-webkit-appearance:none;}
+.inp:focus{border-color:var(--gold);background:var(--c3)}
+.inp::placeholder{color:var(--t3)}
+textarea.inp{resize:none;line-height:1.5;}
+select.inp{cursor:pointer;}
+.section-lbl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--t3);margin-bottom:8px;}
+.btn-gold{background:var(--gold);border:none;border-radius:13px;color:#000;font-family:inherit;font-size:15px;font-weight:900;padding:14px;cursor:pointer;width:100%;transition:opacity .14s;}
+.btn-gold:active{opacity:.7}
+
+/* ── LIST ITEMS ── */
+.li{display:flex;align-items:center;gap:13px;padding:13px 16px;border-bottom:1px solid var(--sep);cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .1s;}
+.li:active{background:var(--c1)}
+.li.done .litxt{text-decoration:line-through;color:var(--t3)}
+.lick{width:24px;height:24px;border-radius:50%;border:2px solid var(--c4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;transition:all .18s;}
+.li.done .lick{background:var(--green);border-color:var(--green);color:#000}
+.litxt{font-size:16px;flex:1;line-height:1.3}
+.lirm{background:none;border:none;color:var(--t3);font-size:20px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;flex-shrink:0;}
+.lirm:active{color:var(--red)}
+.empty-v{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:40px 24px;flex:1;}
+.empty-v .ico{font-size:36px;opacity:.15}
+.empty-v p{font-size:13px;color:var(--t3);text-align:center;line-height:1.7}
+
+/* ════════════════════════════════════
+   GROCERIES + MEALS TAB
+════════════════════════════════════ */
+#gm-split{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0;overflow:hidden;}
+#gm-left,#gm-right{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+#gm-left{border-right:1px solid var(--sep);}
+.col-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 13px 9px;border-bottom:1px solid var(--sep);flex-shrink:0;}
+.col-title{font-size:14px;font-weight:800;display:flex;align-items:center;gap:7px;}
+.col-bdg{background:var(--c3);color:var(--t3);font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.col-clr{background:none;border:none;color:var(--t3);font-size:11px;font-weight:700;padding:4px 9px;border-radius:8px;cursor:pointer;}
+.col-clr:active{background:var(--c3)}
+#grocery-list{flex:1;overflow-y:auto;min-height:0;}
+#grocery-list::-webkit-scrollbar{display:none}
+#g-add-row{display:flex;gap:7px;padding:9px 10px;border-top:1px solid var(--sep);flex-shrink:0;}
+#g-inp{flex:1;background:var(--c2);border:1.5px solid transparent;border-radius:11px;color:var(--t1);font-family:inherit;font-size:15px;padding:9px 11px;outline:none;}
+#g-inp:focus{border-color:var(--gold);background:var(--c3)}
+#g-inp::placeholder{color:var(--t3)}
+#g-btn{background:var(--gold);border:none;border-radius:11px;color:#000;font-size:20px;font-weight:900;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#g-btn:active{opacity:.7}
+#meals-scroll{flex:1;overflow-y:auto;min-height:0;}
+#meals-scroll::-webkit-scrollbar{display:none}
+.meal-day{padding:8px 12px;border-bottom:1px solid var(--sep);}
+.meal-day:last-child{border-bottom:none}
+.meal-day-hd{display:flex;align-items:baseline;gap:6px;margin-bottom:5px;}
+.meal-dow{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--t3);}
+.meal-dt{font-size:15px;font-weight:900;}
+.meal-day.tod .meal-dt{color:var(--gold);}
+.meal-item{display:flex;align-items:center;gap:8px;background:var(--c2);border-radius:8px;padding:6px 9px;margin-bottom:4px;}
+.meal-item-txt{flex:1;font-size:12px;line-height:1.3}
+.meal-rm{background:none;border:none;color:var(--t3);font-size:15px;padding:1px 3px;cursor:pointer;line-height:1;}
+.meal-rm:active{color:var(--red)}
+.meal-add-btn{background:none;border:1.5px dashed var(--c4);border-radius:8px;padding:5px 9px;width:100%;color:var(--t3);font-size:11px;cursor:pointer;text-align:left;}
+.meal-add-btn:active{background:var(--c2)}
+.meal-inp-row{display:none;gap:6px;margin-top:4px;align-items:center;}
+.meal-inp-row.open{display:flex;}
+.meal-inp{flex:1;background:var(--c2);border:1.5px solid var(--gold);border-radius:8px;color:var(--t1);font-family:inherit;font-size:14px;padding:7px 9px;outline:none;}
+.meal-save{background:var(--gold);border:none;border-radius:8px;color:#000;font-weight:800;padding:7px 11px;font-size:13px;cursor:pointer;}
+.meal-cancel{background:var(--c2);border:none;border-radius:8px;color:var(--t2);font-weight:700;padding:7px 9px;font-size:11px;cursor:pointer;}
+
+/* ════════════════════════════════════
+   TO-DO TAB
+════════════════════════════════════ */
+#todo-add-row{display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--sep);flex-shrink:0;}
+#todo-inp{flex:1;background:var(--c2);border:1px solid transparent;border-radius:13px;color:var(--t1);font-family:inherit;font-size:16px;padding:11px 14px;outline:none;}
+#todo-inp:focus{border-color:var(--gold);background:var(--c3)}
+#todo-inp::placeholder{color:var(--t3)}
+#todo-btn{background:var(--gold);border:none;border-radius:13px;color:#000;font-size:20px;font-weight:900;width:44px;height:44px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#todo-btn:active{opacity:.7}
+#todo-clr-bar{display:none;padding:5px 14px;}
+#todo-clr-btn{background:var(--c2);border:none;border-radius:9px;color:var(--t3);font-size:11px;font-weight:700;padding:6px 13px;cursor:pointer;}
+#todo-list{flex:1;overflow-y:auto;min-height:0;}
+#todo-list::-webkit-scrollbar{display:none}
+
+/* ════════════════════════════════════
+   CHORES TAB
+════════════════════════════════════ */
+#chores-scroll{flex:1;overflow-y:auto;min-height:0;padding-bottom:env(safe-area-inset-bottom,16px);}
+#chores-scroll::-webkit-scrollbar{display:none}
+.chore-person-hd{display:flex;align-items:center;gap:10px;padding:12px 16px 6px;flex-shrink:0;}
+.chore-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;}
+.chore-person-name{font-size:14px;font-weight:800;}
+.chore-progress{height:3px;background:var(--c3);border-radius:2px;margin:0 16px 4px;overflow:hidden;}
+.chore-pb{height:100%;border-radius:2px;transition:width .4s;}
+.chi{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--sep);cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .1s;}
+.chi:active{background:var(--c1)}
+.chi.done .chi-txt{text-decoration:line-through;color:var(--t3);}
+.chi-ck{width:22px;height:22px;border-radius:7px;border:2px solid var(--c4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;transition:all .18s;}
+.chi-txt{font-size:15px;flex:1;line-height:1.3;}
+.chi-day{font-size:10px;font-weight:700;color:var(--t3);}
+
+/* ════════════════════════════════════
+   COUNTDOWN TAB
+════════════════════════════════════ */
+#cd-scroll{flex:1;overflow-y:auto;min-height:0;padding-bottom:env(safe-area-inset-bottom,16px);}
+#cd-scroll::-webkit-scrollbar{display:none}
+#cd-inner{padding:16px 14px;display:flex;flex-direction:column;gap:20px;}
+
+/* Add countdown form */
+.cd-form{background:var(--c1);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px;}
+.cd-form-title{font-size:15px;font-weight:800;color:var(--t1);}
+.cd-form-row{display:flex;gap:10px;align-items:center;}
+.cd-emoji-pick{display:flex;gap:7px;flex-wrap:wrap;}
+.cd-emoji-btn{width:38px;height:38px;border-radius:10px;border:2px solid transparent;background:var(--c2);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.cd-emoji-btn.sel{border-color:var(--gold);background:rgba(200,168,75,.12);}
+
+/* Existing countdowns list */
+#cd-list{display:flex;flex-direction:column;gap:10px;}
+.cd-item{background:var(--c1);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px;}
+.cd-item-emoji{font-size:28px;line-height:1;flex-shrink:0;}
+.cd-item-info{flex:1;min-width:0;}
+.cd-item-title{font-size:16px;font-weight:800;color:var(--t1);}
+.cd-item-date{font-size:12px;color:var(--t3);margin-top:3px;}
+.cd-item-days{font-size:20px;font-weight:900;color:var(--gold);flex-shrink:0;}
+.cd-item-rm{background:none;border:none;color:var(--t3);font-size:20px;cursor:pointer;padding:2px 6px;}
+.cd-item-rm:active{color:var(--red)}
+
+/* ════════════════════════════════════
+   STICKY NOTES TAB
+════════════════════════════════════ */
+#notes-scroll{flex:1;overflow-y:auto;min-height:0;padding-bottom:calc(env(safe-area-inset-bottom,16px) + 80px);}
+#notes-scroll::-webkit-scrollbar{display:none}
+#notes-inner{padding:14px 14px;display:flex;flex-direction:column;gap:16px;}
+
+/* Add note form */
+.note-form{background:var(--c1);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:12px;}
+.note-form-title{font-size:15px;font-weight:800;color:var(--t1);}
+.note-author-row{display:flex;gap:8px;}
+.note-author-btn{flex:1;padding:9px 8px;border-radius:11px;border:2px solid transparent;background:var(--c2);color:var(--t2);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center;}
+.note-author-btn.sel{border-color:var(--gold);background:rgba(200,168,75,.12);color:var(--gold);}
+.note-color-row{display:flex;gap:8px;}
+.note-color-btn{width:32px;height:32px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:all .15s;flex-shrink:0;}
+.note-color-btn.sel{border-color:var(--t1);transform:scale(1.15);}
+
+/* Existing notes list */
+#notes-list{display:flex;flex-direction:column;gap:10px;}
+.note-item{border-radius:14px;padding:14px 16px;position:relative;}
+.note-item.yellow{background:linear-gradient(135deg,#fefacd,#fef5a0);}
+.note-item.blue{background:linear-gradient(135deg,#c8eaff,#a8daff);}
+.note-item.green{background:linear-gradient(135deg,#c8fcd6,#a0f0b8);}
+.note-item.pink{background:linear-gradient(135deg,#ffd6e8,#ffb8d8);}
+.note-item.purple{background:linear-gradient(135deg,#e8d6ff,#d4b8ff);}
+.note-item-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.note-item-author{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(0,0,0,.4);}
+.note-item-rm{background:none;border:none;color:rgba(0,0,0,.25);font-size:18px;cursor:pointer;line-height:1;padding:0;}
+.note-item-rm:active{color:rgba(0,0,0,.5)}
+.note-item-text{font-size:15px;line-height:1.5;color:#1a1a0a;white-space:pre-wrap;word-break:break-word;}
+.note-item-date{font-size:10px;color:rgba(0,0,0,.28);margin-top:8px;text-align:right;}
+
+/* ── SAVE BAR ── */
+#save-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(8,8,8,.96);backdrop-filter:blur(14px);padding:10px 14px calc(env(safe-area-inset-bottom,14px)+10px);border-top:1px solid var(--sep);display:none;z-index:200;}
+#save-bar.show{display:block;}
+#save-btn{width:100%;padding:15px;border-radius:15px;border:none;background:var(--gold);color:#000;font-family:inherit;font-size:16px;font-weight:900;cursor:pointer;}
+#save-btn:active{opacity:.7}
+
+/* Schedule tab */
+#blocks-scroll{flex:1;overflow-y:auto;min-height:0;}
+#blocks-scroll::-webkit-scrollbar{display:none}
+#blocks-inner{padding:14px 14px calc(env(safe-area-inset-bottom,16px)+80px);display:flex;flex-direction:column;gap:14px;}
+
+/* Who buttons — Terra=red, Chase=blue, Family=gold */
+#block-who-row{display:flex;gap:7px;}
+.who-btn{flex:1;padding:11px 6px;border-radius:13px;border:2px solid transparent;background:var(--c2);color:var(--t2);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center;}
+.who-btn[data-who="Terra"].sel{border-color:#ff453a;background:rgba(255,69,58,.14);color:#ff453a;}
+.who-btn[data-who="Chase"].sel{border-color:#4facfe;background:rgba(79,172,254,.14);color:#4facfe;}
+.who-btn[data-who="Family"].sel{border-color:var(--gold);background:rgba(200,168,75,.12);color:var(--gold);}
+
+/* Date chips */
+#block-dates{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.dchip{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:11px;background:var(--c2);border:2px solid transparent;cursor:pointer;transition:all .15s;}
+.dchip.sel{background:rgba(200,168,75,.15);border-color:var(--gold);}
+.dchip.tod{border-color:rgba(200,168,75,.35);}
+.dchip-dow{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);}
+.dchip.sel .dchip-dow,.dchip.tod .dchip-dow{color:rgba(200,168,75,.7);}
+.dchip-dt{font-size:17px;font-weight:900;color:var(--t2);}
+.dchip.sel .dchip-dt,.dchip.tod .dchip-dt{color:var(--gold);}
+
+/* Time range picker — tap start then end */
+#block-times{display:flex;flex-direction:column;background:var(--c1);border-radius:16px;overflow:hidden;}
+#range-hint{font-size:12px;color:var(--t3);text-align:center;padding:10px 16px 4px;font-weight:600;letter-spacing:.3px;}
+.slot{display:flex;align-items:center;gap:12px;padding:10px 15px;border-bottom:1px solid var(--sep);cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .1s;}
+.slot:last-child{border-bottom:none}
+.slot:active{background:rgba(255,255,255,.04)}
+.slot.range-start{background:rgba(200,168,75,.18);}
+.slot.range-end{background:rgba(200,168,75,.18);}
+.slot.range-fill{background:rgba(200,168,75,.08);}
+.slot-time{font-size:14px;font-weight:700;color:var(--t2);width:80px;flex-shrink:0;}
+.slot.range-start .slot-time,.slot.range-end .slot-time{color:var(--gold);font-weight:900;}
+.slot-badge{font-size:10px;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:20px;background:var(--gold);color:#000;flex-shrink:0;}
+.slot-lbl{font-size:13px;color:var(--t3);flex:1;}
+.slot.range-start .slot-lbl,.slot.range-end .slot-lbl,.slot.range-fill .slot-lbl{color:var(--t1);}
+
+/* Existing blocks */
+#existing-blocks-wrap{display:none}
+#existing-blocks{display:flex;flex-direction:column;gap:7px;}
+.block-item{display:flex;align-items:center;gap:10px;background:var(--c1);border-radius:13px;padding:11px 14px;}
+.block-item-info{flex:1;min-width:0;}
+.block-who{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+.block-time{font-size:14px;font-weight:700;}
+.block-date{font-size:11px;color:var(--t3);margin-top:1px;}
+.block-rm{background:none;border:none;color:var(--t3);font-size:19px;padding:3px 7px;cursor:pointer;}
+.block-rm:active{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div id="topbar-inner">
+      <div id="app-title"><img src="icon.jpg" alt="">Kitchen <span>Hub</span></div>
+      <div id="sync-dot"><div class="sdot ok" id="sdot"></div><span id="sdot-lbl">Connected</span></div>
+    </div>
+    <div id="tabs">
+      <button class="tab on" id="tab-gm" onclick="switchTab('gm')">🛒 Groceries<br>&amp; Meals</button>
+      <button class="tab" id="tab-todo" onclick="switchTab('todo')">✅ To-Do <span class="tab-bdg" id="tbdg">0</span></button>
+      <button class="tab" id="tab-chores" onclick="switchTab('chores')">🧹 Chores <span class="tab-bdg" id="chbdg">0</span></button>
+      <button class="tab" id="tab-blocks" onclick="switchTab('blocks')">📅 Schedule</button>
+      <button class="tab" id="tab-cd" onclick="switchTab('cd')">⏳ Countdowns</button>
+      <button class="tab" id="tab-notes" onclick="switchTab('notes')">📌 Notes</button>
+    </div>
+  </div>
+
+  <div id="content">
+
+    <!-- ═══ GROCERIES + MEALS ═══ -->
+    <div class="view on" id="gm-view">
+      <div id="gm-split">
+        <div id="gm-left">
+          <div class="col-hd">
+            <div class="col-title">🛒 Groceries <span class="col-bdg" id="g-bdg">0</span></div>
+            <button class="col-clr" onclick="clearDoneGrocery()">Clear done</button>
+          </div>
+          <div id="grocery-list"><div class="empty-v" id="g-empty"><div class="ico">🛒</div><p>Nothing yet</p></div></div>
+          <div id="g-add-row">
+            <input id="g-inp" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Add item…" onkeydown="if(event.key==='Enter')addGrocery()">
+            <button id="g-btn" onclick="addGrocery()">+</button>
+          </div>
+        </div>
+        <div id="gm-right">
+          <div class="col-hd"><div class="col-title">🍽️ Dinner Plan</div></div>
+          <div id="meals-scroll"><div class="empty-v" id="m-empty" style="display:none"><div class="ico">🍽️</div><p>Tap + to plan a meal</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TO-DO ═══ -->
+    <div class="view" id="todo-view">
+      <div id="todo-add-row">
+        <input id="todo-inp" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Add task…" onkeydown="if(event.key==='Enter')addTodo()">
+        <button id="todo-btn" onclick="addTodo()">+</button>
+      </div>
+      <div id="todo-clr-bar"><button id="todo-clr-btn" onclick="clearDoneTodo()">Clear done</button></div>
+      <div id="todo-list"><div class="empty-v" id="td-empty"><div class="ico">✅</div><p>Nothing to do.<br>Type above to add.</p></div></div>
+    </div>
+
+    <!-- ═══ CHORES ═══ -->
+    <div class="view" id="chores-view">
+      <div id="chores-scroll">
+        <div class="empty-v" id="ch-empty" style="display:none"><div class="ico">🧹</div><p>No chores due today</p></div>
+        <div id="chores-by-person"></div>
+      </div>
+    </div>
+
+    <!-- ═══ SCHEDULE ═══ -->
+    <div class="view" id="blocks-view">
+      <div id="blocks-scroll">
+        <div id="blocks-inner">
+          <div>
+            <div class="section-lbl">WHO IS THIS FOR?</div>
+            <div id="block-who-row">
+              <button class="who-btn sel" data-who="Terra" onclick="selectWho(this)">Terra</button>
+              <button class="who-btn" data-who="Chase" onclick="selectWho(this)">Chase</button>
+              <button class="who-btn" data-who="Family" onclick="selectWho(this)">Family</button>
+            </div>
+          </div>
+          <div>
+            <div class="section-lbl">WHICH DAY?</div>
+            <div id="block-dates"></div>
+          </div>
+          <div>
+            <div class="section-lbl">SET TIME RANGE</div>
+            <div id="block-times">
+              <div id="range-hint">Tap a start time, then tap an end time</div>
+            </div>
+          </div>
+          <div id="existing-blocks-wrap">
+            <div class="section-lbl">UPCOMING BLOCKS</div>
+            <div id="existing-blocks"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ COUNTDOWNS ═══ -->
+    <div class="view" id="cd-view">
+      <div id="cd-scroll">
+        <div id="cd-inner">
+
+          <!-- Add form -->
+          <div class="cd-form">
+            <div class="cd-form-title">➕ New Countdown</div>
+            <div class="section-lbl">PICK AN EMOJI</div>
+            <div class="cd-emoji-pick" id="cd-emoji-row">
+              <!-- populated by JS -->
+            </div>
+            <input class="inp" id="cd-title-inp" placeholder="What are you counting down to?" autocomplete="off" autocorrect="off">
+            <input class="inp" id="cd-date-inp" type="date">
+            <button class="btn-gold" onclick="addCountdown()" style="margin-top:4px;">Add Countdown</button>
+          </div>
+
+          <!-- Existing countdowns -->
+          <div>
+            <div class="section-lbl">UPCOMING COUNTDOWNS</div>
+            <div id="cd-list"><div class="empty-v"><div class="ico">⏳</div><p>No countdowns yet</p></div></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ STICKY NOTES ═══ -->
+    <div class="view" id="notes-view">
+      <div id="notes-scroll">
+        <div id="notes-inner">
+
+          <!-- Add note form -->
+          <div class="note-form">
+            <div class="note-form-title">📌 New Note</div>
+
+            <div class="section-lbl">FROM</div>
+            <div class="note-author-row" id="note-author-row">
+              <!-- populated by JS -->
+            </div>
+
+            <div class="section-lbl">NOTE COLOR</div>
+            <div class="note-color-row" id="note-color-row">
+              <button class="note-color-btn sel" data-color="yellow" style="background:#fef5a0;border-color:#c8a84b;" onclick="selectNoteColor(this)"></button>
+              <button class="note-color-btn" data-color="blue" style="background:#a8daff;" onclick="selectNoteColor(this)"></button>
+              <button class="note-color-btn" data-color="green" style="background:#a0f0b8;" onclick="selectNoteColor(this)"></button>
+              <button class="note-color-btn" data-color="pink" style="background:#ffb8d8;" onclick="selectNoteColor(this)"></button>
+              <button class="note-color-btn" data-color="purple" style="background:#d4b8ff;" onclick="selectNoteColor(this)"></button>
+            </div>
+
+            <textarea class="inp" id="note-text-inp" placeholder="Write your note here…" rows="4" style="width:100%;"></textarea>
+
+            <button class="btn-gold" onclick="addNote()">Post Note to Kitchen Display</button>
+          </div>
+
+          <!-- Existing notes -->
+          <div>
+            <div class="section-lbl">POSTED NOTES</div>
+            <div id="notes-list"><div class="empty-v"><div class="ico">📌</div><p>No notes yet</p></div></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end #content -->
+</div><!-- end #app -->
+
+<div id="save-bar"><button id="save-btn" onclick="saveBlocks()">Add Meeting Blocks to Calendar</button></div>
+
+<script>
+// ════════════════════════════════════════════
+//  FIREBASE
+// ════════════════════════════════════════════
+const firebaseConfig={apiKey:"AIzaSyCMCrww2E6M8UYwH4LQKyPnHz7agflmU7M",authDomain:"kitchen-homebase.firebaseapp.com",databaseURL:"https://kitchen-homebase-default-rtdb.firebaseio.com",projectId:"kitchen-homebase",storageBucket:"kitchen-homebase.firebasestorage.app",messagingSenderId:"42483963800",appId:"1:42483963800:web:45503717a66278646d3ded"};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database();
+
+// ════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════
+let currentTab="gm";
+let groceryItems=[],todoItems=[],mealsData={},chores=[],choresDone={};
+let countdownItems=[]; // [{id, title, date, emoji}]
+let noteItems=[];      // [{id, text, author, color, createdAt}]
+let mealEditDate=null;
+let blockWho="Terra",blockDate=null,blockEvents=[];
+
+// Countdown form state
+const CD_EMOJIS=['🎉','🎂','✈️','🏖️','🎄','🎃','🏆','💍','🎓','🎵','🎮','🌟','🚀','❤️','🎁','🏠','🍕','⚽'];
+let cdSelectedEmoji='🎉';
+
+// Notes form state
+const NOTE_AUTHORS=['Chase','Terra','Rory','Family'];
+let noteSelectedAuthor='Family';
+let noteSelectedColor='yellow';
+
+function fmtD(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function fmtSlot(hhmm){const[h,m]=hhmm.split(":").map(Number);const ap=h>=12?"PM":"AM";const h12=h%12||12;return h12+":"+(m<10?"0"+m:m)+" "+ap;}
+
+// ════════════════════════════════════════════
+//  FIREBASE SYNC INDICATOR
+// ════════════════════════════════════════════
+db.ref(".info/connected").on("value",s=>{const ok=s.val();document.getElementById("sdot").className="sdot "+(ok?"ok":"");document.getElementById("sdot-lbl").textContent=ok?"Connected":"Offline";});
+
+// ════════════════════════════════════════════
+//  FIREBASE LISTENERS
+// ════════════════════════════════════════════
+db.ref("grocery").on("value",s=>{const v=s.val()||{};groceryItems=Object.entries(v).map(([id,x])=>({id,...x})).sort((a,b)=>(a.done-b.done)||(a.addedAt-b.addedAt));if(currentTab==="gm")renderGroceryList();updateBadge("g-bdg",groceryItems.filter(i=>!i.done).length);});
+db.ref("todo").on("value",s=>{const v=s.val()||{};todoItems=Object.entries(v).map(([id,x])=>({id,...x})).sort((a,b)=>(a.done-b.done)||(a.addedAt-b.addedAt));if(currentTab==="todo")renderTodoList();updateBadge("tbdg",todoItems.filter(i=>!i.done).length);});
+(function(){const t=new Date();for(let i=0;i<14;i++){const d=new Date(t);d.setDate(t.getDate()+i);const k=fmtD(d);db.ref("meals/"+k).on("value",s=>{const v=s.val();if(v&&v.length)mealsData[k]=v;else delete mealsData[k];if(currentTab==="gm")renderMeals();});}})();
+db.ref("chores").on("value",s=>{const v=s.val();if(!v)chores=[];else if(Array.isArray(v))chores=v;else chores=Object.values(v);if(currentTab==="chores")renderChores();updateChoreBadge();});
+db.ref("choresDone").on("value",s=>{choresDone=s.val()||{};if(currentTab==="chores")renderChores();updateChoreBadge();});
+db.ref("events").on("value",s=>{const v=s.val()||{};blockEvents=Object.entries(v).map(([id,ev])=>({...ev,id})).filter(ev=>(ev.summary||ev.text||"").includes("Meeting Block")).sort((a,b)=>(a.date||"").localeCompare(b.date||""));if(currentTab==="blocks")renderExistingBlocks();});
+
+// Countdowns listener
+db.ref("countdowns").on("value",s=>{
+  const v=s.val()||{};
+  const now=new Date();
+  countdownItems=Object.entries(v)
+    .map(([id,x])=>({id,...x}))
+    .filter(c=>new Date(c.date)>now)
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(currentTab==="cd")renderCountdowns();
+});
+
+// Notes listener
+db.ref("notes").on("value",s=>{
+  const v=s.val()||{};
+  noteItems=Object.entries(v)
+    .map(([id,x])=>({id,...x}))
+    .sort((a,b)=>b.createdAt-a.createdAt);
+  if(currentTab==="notes")renderNotesList();
+});
+
+// ════════════════════════════════════════════
+//  TAB SWITCHING
+// ════════════════════════════════════════════
+function switchTab(tab){
+  currentTab=tab;
+  ["gm","todo","chores","blocks","cd","notes"].forEach(t=>{document.getElementById("tab-"+t)?.classList.toggle("on",t===tab);});
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));
+  const view=document.getElementById(tab+"-view");if(view)view.classList.add("on");
+  document.getElementById("save-bar").classList.remove("show");
+  if(tab==="gm"){renderGroceryList();renderMeals();setTimeout(()=>document.getElementById("g-inp")?.focus(),80);}
+  if(tab==="todo"){renderTodoList();setTimeout(()=>document.getElementById("todo-inp")?.focus(),80);}
+  if(tab==="chores")renderChores();
+  if(tab==="blocks"){buildBlockDates();buildTimeSlots();renderExistingBlocks();}
+  if(tab==="cd")renderCountdowns();
+  if(tab==="notes")renderNotesList();
+}
+
+// ════════════════════════════════════════════
+//  GROCERIES
+// ════════════════════════════════════════════
+function renderGroceryList(){const list=document.getElementById("grocery-list"),empty=document.getElementById("g-empty");Array.from(list.querySelectorAll(".li")).forEach(el=>el.remove());if(!groceryItems.length){empty.style.display="flex";return;}empty.style.display="none";groceryItems.forEach(item=>{const div=document.createElement("div");div.className="li"+(item.done?" done":"");div.innerHTML=`<div class="lick">${item.done?"✓":""}</div><div class="litxt">${esc(item.text)}</div><button class="lirm" onclick="removeGrocery('${item.id}');event.stopPropagation()">×</button>`;div.querySelector(".lick").onclick=div.querySelector(".litxt").onclick=()=>toggleGrocery(item.id,item.done);list.appendChild(div);});}
+function addGrocery(){const inp=document.getElementById("g-inp");const t=inp.value.trim();if(!t)return;sync();db.ref("grocery").push({text:t,done:false,addedAt:Date.now()}).then(unsync);inp.value="";inp.focus();}
+function toggleGrocery(id,done){db.ref("grocery/"+id+"/done").set(!done);}
+function removeGrocery(id){db.ref("grocery/"+id).remove();}
+function clearDoneGrocery(){const u={};groceryItems.filter(i=>i.done).forEach(i=>{u[i.id]=null;});if(Object.keys(u).length)db.ref("grocery").update(u);}
+
+// ════════════════════════════════════════════
+//  MEALS
+// ════════════════════════════════════════════
+function renderMeals(){const wrap=document.getElementById("meals-scroll"),empty=document.getElementById("m-empty");Array.from(wrap.querySelectorAll(".meal-day")).forEach(el=>el.remove());const ts=fmtD(new Date());const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];let has=false;for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()+i);const k=fmtD(d),isTod=k===ts,ml=mealsData[k]||[];if(ml.length)has=true;const card=document.createElement("div");card.className="meal-day"+(isTod?" tod":"");const rows=ml.map((m,mi)=>`<div class="meal-item"><div class="meal-item-txt">${esc(m)}</div><button class="meal-rm" onclick="removeMeal('${k}',${mi})">×</button></div>`).join("");card.innerHTML=`<div class="meal-day-hd"><div class="meal-dow">${DOW[d.getDay()]}</div><div class="meal-dt">${MON[d.getMonth()]} ${d.getDate()}</div></div><div>${rows}<button class="meal-add-btn" onclick="startMealAdd('${k}')">+ Add meal</button></div><div class="meal-inp-row" id="mir-${k}"><input class="meal-inp" id="mi-${k}" placeholder="e.g. Tacos 🌮" onkeydown="if(event.key==='Enter')saveMealAdd('${k}');if(event.key==='Escape')cancelMealAdd('${k}')"><button class="meal-save" onclick="saveMealAdd('${k}')">Add</button><button class="meal-cancel" onclick="cancelMealAdd('${k}')">×</button></div>`;wrap.appendChild(card);}empty.style.display=has?"none":"flex";}
+function startMealAdd(k){if(mealEditDate)cancelMealAdd(mealEditDate);mealEditDate=k;const row=document.getElementById("mir-"+k);if(row){row.classList.add("open");const inp=document.getElementById("mi-"+k);if(inp){inp.value="";inp.focus();}}}
+function cancelMealAdd(k){const row=document.getElementById("mir-"+k);if(row)row.classList.remove("open");mealEditDate=null;}
+function saveMealAdd(k){const inp=document.getElementById("mi-"+k);const t=inp?inp.value.trim():"";if(!t){cancelMealAdd(k);return;}db.ref("meals/"+k).set([...(mealsData[k]||[]),t]);cancelMealAdd(k);}
+function removeMeal(k,i){const a=[...(mealsData[k]||[])];a.splice(i,1);db.ref("meals/"+k).set(a.length?a:null);}
+
+// ════════════════════════════════════════════
+//  TO-DO
+// ════════════════════════════════════════════
+function renderTodoList(){const list=document.getElementById("todo-list"),empty=document.getElementById("td-empty");Array.from(list.querySelectorAll(".li")).forEach(el=>el.remove());if(!todoItems.length){empty.style.display="flex";return;}empty.style.display="none";const hd=todoItems.some(i=>i.done);document.getElementById("todo-clr-bar").style.display=hd?"block":"none";todoItems.forEach(item=>{const div=document.createElement("div");div.className="li"+(item.done?" done":"");div.innerHTML=`<div class="lick">${item.done?"✓":""}</div><div class="litxt">${esc(item.text)}</div><button class="lirm" onclick="removeTodo('${item.id}');event.stopPropagation()">×</button>`;div.querySelector(".lick").onclick=div.querySelector(".litxt").onclick=()=>toggleTodo(item.id,item.done);list.appendChild(div);});}
+function addTodo(){const inp=document.getElementById("todo-inp");const t=inp.value.trim();if(!t)return;sync();db.ref("todo").push({text:t,done:false,addedAt:Date.now()}).then(unsync);inp.value="";inp.focus();}
+function toggleTodo(id,done){db.ref("todo/"+id+"/done").set(!done);}
+function removeTodo(id){db.ref("todo/"+id).remove();}
+function clearDoneTodo(){const u={};todoItems.filter(i=>i.done).forEach(i=>{u[i.id]=null;});if(Object.keys(u).length)db.ref("todo").update(u);}
+
+// ════════════════════════════════════════════
+//  CHORES
+// ════════════════════════════════════════════
+const DAY_NAMES=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+function choreDay(c){return c.day||c.freq||"weekly";}
+function isChoreToday(c){const d=choreDay(c);const now=new Date();if(d==="daily")return true;if(d==="monthly")return now.getDate()===1;const di=DAY_NAMES.indexOf(d);if(di>=0)return now.getDay()===di;return true;}
+function choreKey(idx,c){function fd(dt){return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}const now=new Date();const d=choreDay(c);if(d==="daily")return "d_"+fd(now)+"_"+idx;if(d==="monthly")return "m_"+now.getFullYear()+"_"+now.getMonth()+"_"+idx;const di=DAY_NAMES.indexOf(d);const sun=new Date(now);sun.setDate(now.getDate()-now.getDay());if(di>=0)return "wd_"+fd(sun)+"_"+d+"_"+idx;return "w_"+fd(sun)+"_"+idx;}
+function choreLabel(c){const d=choreDay(c);if(d==="daily")return "Every Day";if(d==="monthly")return "1st of Month";const di=DAY_NAMES.indexOf(d);if(di>=0){const full=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];return full[di]+"s";}return "Weekly";}
+function renderChores(){const container=document.getElementById("chores-by-person"),empty=document.getElementById("ch-empty");container.innerHTML="";const memberColors={Terra:"#c8a84b",Chase:"#4facfe",Rory:"#34c759",Family:"#bf5af2"};const byPerson={};chores.forEach((c,idx)=>{if(!isChoreToday(c))return;const m=c.member||"Family";if(!byPerson[m])byPerson[m]=[];byPerson[m].push({...c,idx});});const dueToday=Object.values(byPerson).flat();if(!dueToday.length){empty.style.display="flex";return;}empty.style.display="none";Object.entries(byPerson).forEach(([member,mc])=>{const color=memberColors[member]||"#4facfe";const done=mc.filter(c=>!!choresDone[choreKey(c.idx,c).replace(/\//g,"_")]).length;const total=mc.length;const pct=total?Math.round(done/total*100):0;const hd=document.createElement("div");hd.className="chore-person-hd";hd.innerHTML=`<div class="chore-av" style="background:${color}22;color:${color}">${member.charAt(0)}</div><div class="chore-person-name" style="color:${color}">${member}</div><div style="margin-left:auto;font-size:11px;color:var(--t3)">${done}/${total}</div>`;container.appendChild(hd);const pg=document.createElement("div");pg.className="chore-progress";pg.innerHTML=`<div class="chore-pb" style="width:${pct}%;background:${color}"></div>`;container.appendChild(pg);mc.forEach(c=>{const key=choreKey(c.idx,c).replace(/\//g,"_");const isDone=!!choresDone[key];const row=document.createElement("div");row.className="chi"+(isDone?" done":"");row.innerHTML=`<div class="chi-ck" style="${isDone?`background:${color};border-color:${color};color:#000`:""}">${isDone?"✓":""}</div><div class="chi-txt">${esc(c.text)}</div><div class="chi-day">${choreLabel(c)}</div>`;row.onclick=()=>{if(isDone)db.ref("choresDone/"+key).remove();else db.ref("choresDone/"+key).set(true);};container.appendChild(row);});});}
+function updateChoreBadge(){const due=chores.map((c,i)=>({...c,idx:i})).filter(c=>isChoreToday(c));const undone=due.filter(c=>!choresDone[choreKey(c.idx,c).replace(/\//g,"_")]).length;updateBadge("chbdg",undone);}
+
+// ════════════════════════════════════════════
+//  SCHEDULE / BLOCKS  — start/end range picker
+// ════════════════════════════════════════════
+
+// Member colours: Terra = red, Chase = blue, Family = gold
+const MEMBER_COLORS={Terra:"#ff453a",Chase:"#4facfe",Family:"#c8a84b"};
+
+// Time slots: every 30 min, 7 AM – 6 PM
+const ALL_SLOTS=(()=>{const s=[];for(let h=7;h<=18;h++)for(let m=0;m<60;m+=30){if(h===18&&m>0)break;s.push((h<10?"0"+h:h)+":"+(m<10?"0"+m:m));}return s;})();
+
+// Range state — null means nothing picked yet; after first tap = start set
+let rangeStart=null; // slot index into ALL_SLOTS
+let rangeEnd=null;   // slot index
+
+function selectWho(btn){
+  blockWho=btn.dataset.who;
+  document.querySelectorAll(".who-btn").forEach(b=>b.classList.remove("sel"));
+  btn.classList.add("sel");
+  updateSaveBar();
+}
+
+function buildBlockDates(){
+  const wrap=document.getElementById("block-dates");wrap.innerHTML="";
+  const DOW=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const today=new Date();today.setHours(0,0,0,0);
+  for(let i=0;i<14;i++){
+    const d=new Date(today);d.setDate(today.getDate()+i);
+    const key=fmtD(d);const isTod=i===0;
+    const chip=document.createElement("div");
+    chip.className="dchip"+(isTod?" tod":"")+(blockDate===key?" sel":"");
+    chip.innerHTML=`<div class="dchip-dow">${DOW[d.getDay()]}</div><div class="dchip-dt">${d.getDate()}</div>`;
+    chip.onclick=()=>{
+      blockDate=key;
+      document.querySelectorAll(".dchip").forEach(c=>c.classList.remove("sel"));
+      chip.classList.add("sel");
+      rangeStart=null;rangeEnd=null;
+      buildTimeSlots();updateSaveBar();
+    };
+    wrap.appendChild(chip);
+  }
+  if(!blockDate){blockDate=fmtD(today);wrap.querySelector(".dchip")?.classList.add("sel");}
+}
+
+function buildTimeSlots(){
+  const wrap=document.getElementById("block-times");
+  // Keep the hint div, remove old slots
+  Array.from(wrap.querySelectorAll(".slot")).forEach(s=>s.remove());
+
+  // Update hint text
+  const hint=document.getElementById("range-hint");
+  if(rangeStart===null){
+    hint.textContent="Tap a start time, then tap an end time";
+    hint.style.color="var(--t3)";
+  } else if(rangeEnd===null){
+    hint.textContent=`Start: ${fmtSlot(ALL_SLOTS[rangeStart])} — now tap an end time`;
+    hint.style.color="var(--gold)";
+  } else {
+    const dur=rangeDurationMins();
+    const h=Math.floor(dur/60),m=dur%60;
+    const durStr=h&&m?`${h}h ${m}m`:h?`${h}h`:`${m}m`;
+    hint.textContent=`${fmtSlot(ALL_SLOTS[rangeStart])} – ${fmtSlot(ALL_SLOTS[rangeEnd])} · ${durStr}`;
+    hint.style.color="var(--green)";
+  }
+
+  ALL_SLOTS.forEach((key,idx)=>{
+    const isStart=rangeStart===idx;
+    const isEnd=rangeEnd!==null&&rangeEnd===idx;
+    const inFill=rangeStart!==null&&rangeEnd!==null&&idx>Math.min(rangeStart,rangeEnd)&&idx<Math.max(rangeStart,rangeEnd);
+    let cls="slot";
+    if(isStart)cls+=" range-start";
+    else if(isEnd)cls+=" range-end";
+    else if(inFill)cls+=" range-fill";
+
+    const slot=document.createElement("div");slot.className=cls;
+
+    let badge="";
+    if(isStart)badge=`<span class="slot-badge">START</span>`;
+    else if(isEnd)badge=`<span class="slot-badge">END</span>`;
+
+    slot.innerHTML=`<div class="slot-time">${fmtSlot(key)}</div>${badge}<div class="slot-lbl">${isStart||isEnd||inFill?"Busy":"—"}</div>`;
+
+    slot.onclick=()=>{
+      if(rangeStart===null){
+        // First tap = set start
+        rangeStart=idx;rangeEnd=null;
+      } else if(rangeEnd===null){
+        // Second tap = set end (allow same slot to cancel)
+        if(idx===rangeStart){rangeStart=null;}
+        else{rangeEnd=idx;if(rangeEnd<rangeStart){[rangeStart,rangeEnd]=[rangeEnd,rangeStart];}}
+      } else {
+        // Third tap = reset and start fresh
+        rangeStart=idx;rangeEnd=null;
+      }
+      buildTimeSlots();updateSaveBar();
+    };
+    wrap.appendChild(slot);
+  });
+}
+
+function rangeDurationMins(){
+  if(rangeStart===null||rangeEnd===null)return 0;
+  const lo=Math.min(rangeStart,rangeEnd);
+  const hi=Math.max(rangeStart,rangeEnd);
+  // Each slot is 30 min; range covers lo..hi inclusive = (hi-lo+1) slots but we
+  // treat it as lo:00 to hi+1:00, so duration = (hi-lo+1)*30
+  return (hi-lo+1)*30;
+}
+
+function getRangeSlots(){
+  if(rangeStart===null||rangeEnd===null)return[];
+  const lo=Math.min(rangeStart,rangeEnd);
+  const hi=Math.max(rangeStart,rangeEnd);
+  return ALL_SLOTS.slice(lo,hi+1);
+}
+
+function updateSaveBar(){
+  const slots=getRangeSlots();
+  const btn=document.getElementById("save-btn");
+  const bar=document.getElementById("save-bar");
+  if(slots.length&&blockDate){
+    bar.classList.add("show");
+    const dur=rangeDurationMins();
+    const h=Math.floor(dur/60),m=dur%60;
+    const durStr=h&&m?`${h}h ${m}m`:h?`${h}h`:`${m}m`;
+    btn.textContent=`Add ${durStr} block for ${blockWho}`;
+  } else {
+    bar.classList.remove("show");
+  }
+}
+
+async function saveBlocks(){
+  const slots=getRangeSlots();
+  if(!slots.length||!blockDate)return;
+  const btn=document.getElementById("save-btn");
+  btn.textContent="Saving…";btn.disabled=true;
+
+  // Save one event per 30-min slot so they appear correctly in the week view
+  const saves=slots.map(hhmm=>
+    db.ref("events").push({
+      date:blockDate,
+      summary:"Meeting Block",
+      text:"Meeting Block",
+      time:fmtSlot(hhmm),
+      member:blockWho,
+      src:"local",
+      createdAt:Date.now()
+    })
+  );
+  await Promise.all(saves);
+
+  const dur=rangeDurationMins();
+  const h=Math.floor(dur/60),m=dur%60;
+  const durStr=h&&m?`${h}h ${m}m`:h?`${h}h`:`${m}m`;
+  btn.textContent=`✓ ${durStr} block added for ${blockWho}!`;
+  btn.disabled=false;
+
+  setTimeout(()=>{
+    rangeStart=null;rangeEnd=null;
+    buildTimeSlots();updateSaveBar();renderExistingBlocks();
+  },1400);
+}
+
+function renderExistingBlocks(){
+  const wrap=document.getElementById("existing-blocks-wrap"),list=document.getElementById("existing-blocks");
+  const today=fmtD(new Date());
+  const upcoming=blockEvents.filter(e=>e.date>=today).slice(0,30);
+  wrap.style.display=upcoming.length?"block":"none";
+  list.innerHTML="";
+
+  // Group consecutive slots into single display rows
+  // Sort by date then time
+  const sorted=[...upcoming].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+
+  // Build merged blocks: consecutive slots for same member on same date
+  const merged=[];
+  sorted.forEach(ev=>{
+    const last=merged[merged.length-1];
+    if(last&&last.date===ev.date&&last.member===ev.member&&areConsecutive(last.endTime,ev.time)){
+      last.endTime=next30(ev.time);last.ids.push(ev.id);
+    } else {
+      merged.push({date:ev.date,member:ev.member,startTime:ev.time,endTime:next30(ev.time),ids:[ev.id]});
+    }
+  });
+
+  merged.forEach(blk=>{
+    const color=MEMBER_COLORS[blk.member]||"#c8a84b";
+    const dt=new Date(blk.date+"T12:00:00");
+    const dl=dt.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+    const timeRange=`${blk.startTime} – ${blk.endTime}`;
+    const div=document.createElement("div");div.className="block-item";
+    div.innerHTML=`<div style="width:4px;min-height:42px;border-radius:2px;background:${color};flex-shrink:0"></div><div class="block-item-info"><div class="block-who" style="color:${color}">${blk.member}</div><div class="block-time">${timeRange}</div><div class="block-date">${dl}</div></div><button class="block-rm" onclick="removeBlocks(${JSON.stringify(blk.ids)})">×</button>`;
+    list.appendChild(div);
+  });
+}
+
+// Is slotB the 30-min successor of slotA? e.g. "09:00" → "09:30"
+function areConsecutive(endTime,nextStart){
+  // endTime is the computed end (next30 of last slot), nextStart is the raw slot time
+  return endTime===nextStart;
+}
+function next30(hhmm){
+  const[h,m]=hhmm.split(":").map(Number);
+  const total=h*60+m+30;
+  return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+
+function removeBlocks(ids){
+  if(!confirm("Remove this meeting block?"))return;
+  const updates={};ids.forEach(id=>{updates[id]=null;});
+  db.ref("events").update(updates);
+}
+
+// ════════════════════════════════════════════
+//  COUNTDOWNS
+// ════════════════════════════════════════════
+function initCountdownForm(){
+  const row=document.getElementById("cd-emoji-row");
+  CD_EMOJIS.forEach(emoji=>{
+    const btn=document.createElement("button");
+    btn.className="cd-emoji-btn"+(emoji===cdSelectedEmoji?" sel":"");
+    btn.textContent=emoji;
+    btn.onclick=()=>{cdSelectedEmoji=emoji;document.querySelectorAll(".cd-emoji-btn").forEach(b=>b.classList.remove("sel"));btn.classList.add("sel");};
+    row.appendChild(btn);
+  });
+  // Default date to 30 days from now
+  const def=new Date();def.setDate(def.getDate()+30);
+  document.getElementById("cd-date-inp").value=fmtD(def);
+  document.getElementById("cd-date-inp").min=fmtD(new Date());
+}
+
+function addCountdown(){
+  const title=document.getElementById("cd-title-inp").value.trim();
+  const date=document.getElementById("cd-date-inp").value;
+  if(!title||!date){alert("Please add a title and date.");return;}
+  const d=new Date(date+"T00:00:00");
+  if(d<=new Date()){alert("Please pick a future date.");return;}
+  sync();
+  db.ref("countdowns").push({title,date,emoji:cdSelectedEmoji,createdAt:Date.now()}).then(()=>{
+    unsync();
+    document.getElementById("cd-title-inp").value="";
+    // Reset date to 30 days out
+    const def=new Date();def.setDate(def.getDate()+30);document.getElementById("cd-date-inp").value=fmtD(def);
+  });
+}
+
+function renderCountdowns(){
+  const list=document.getElementById("cd-list");list.innerHTML="";
+  if(!countdownItems.length){list.innerHTML='<div class="empty-v"><div class="ico">⏳</div><p>No countdowns yet.<br>Add one above!</p></div>';return;}
+  const now=new Date();
+  countdownItems.forEach(cd=>{
+    const target=new Date(cd.date+"T00:00:00");
+    const diffMs=target-now;
+    const days=Math.ceil(diffMs/(1000*60*60*24));
+    const opts={weekday:"short",month:"short",day:"numeric",year:"numeric"};
+    const dateStr=target.toLocaleDateString("en-US",opts);
+    const div=document.createElement("div");div.className="cd-item";
+    div.innerHTML=`<div class="cd-item-emoji">${cd.emoji||"🎉"}</div><div class="cd-item-info"><div class="cd-item-title">${esc(cd.title)}</div><div class="cd-item-date">${dateStr}</div></div><div class="cd-item-days">${days}d</div><button class="cd-item-rm" onclick="removeCountdown('${cd.id}')">×</button>`;
+    list.appendChild(div);
+  });
+}
+
+function removeCountdown(id){
+  if(confirm("Remove this countdown?"))db.ref("countdowns/"+id).remove();
+}
+
+// ════════════════════════════════════════════
+//  STICKY NOTES
+// ════════════════════════════════════════════
+function initNotesForm(){
+  const row=document.getElementById("note-author-row");
+  NOTE_AUTHORS.forEach(author=>{
+    const btn=document.createElement("button");
+    btn.className="note-author-btn"+(author===noteSelectedAuthor?" sel":"");
+    btn.textContent=author;
+    btn.onclick=()=>{noteSelectedAuthor=author;document.querySelectorAll(".note-author-btn").forEach(b=>b.classList.remove("sel"));btn.classList.add("sel");};
+    row.appendChild(btn);
+  });
+}
+
+function selectNoteColor(btn){
+  noteSelectedColor=btn.dataset.color;
+  document.querySelectorAll(".note-color-btn").forEach(b=>b.classList.remove("sel"));
+  btn.classList.add("sel");
+}
+
+function addNote(){
+  const text=document.getElementById("note-text-inp").value.trim();
+  if(!text){alert("Write something first!");return;}
+  sync();
+  db.ref("notes").push({
+    text,
+    author:noteSelectedAuthor,
+    color:noteSelectedColor,
+    createdAt:Date.now()
+  }).then(()=>{
+    unsync();
+    document.getElementById("note-text-inp").value="";
+  });
+}
+
+function renderNotesList(){
+  const list=document.getElementById("notes-list");list.innerHTML="";
+  if(!noteItems.length){list.innerHTML='<div class="empty-v"><div class="ico">📌</div><p>No notes posted yet.</p></div>';return;}
+  noteItems.forEach(note=>{
+    const d=new Date(note.createdAt||Date.now());
+    const dateStr=d.toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+    const div=document.createElement("div");
+    div.className="note-item "+(note.color||"yellow");
+    div.innerHTML=`<div class="note-item-header"><div class="note-item-author">${esc(note.author||"")}</div><button class="note-item-rm" onclick="removeNote('${note.id}')">×</button></div><div class="note-item-text">${esc(note.text||"")}</div><div class="note-item-date">${dateStr}</div>`;
+    list.appendChild(div);
+  });
+}
+
+function removeNote(id){
+  if(confirm("Remove this note from the kitchen display?"))db.ref("notes/"+id).remove();
+}
+
+// ════════════════════════════════════════════
+//  SHARED UTILS
+// ════════════════════════════════════════════
+function sync(){document.getElementById("sdot").className="sdot syn";document.getElementById("sdot-lbl").textContent="Saving…";}
+function unsync(){document.getElementById("sdot").className="sdot ok";document.getElementById("sdot-lbl").textContent="Connected";}
+function updateBadge(id,n){const el=document.getElementById(id);if(el)el.textContent=n;}
+
+// ════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════
+window.addEventListener("load",()=>{
+  initCountdownForm();
+  initNotesForm();
+  renderGroceryList();
+  renderMeals();
+  setTimeout(()=>document.getElementById("g-inp")?.focus(),300);
+});
+</script>
+</body>
+</html>
